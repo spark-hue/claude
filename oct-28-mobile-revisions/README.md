@@ -40,6 +40,10 @@ changes only apply at phone/tablet widths (999px and below, mostly 760px and bel
 | 14.2 | Quote order *(also Desktop)* | Queens Post ("The first Korean…") first, NYC Tourism ("Fried to a shattering crunch") second. |
 | 15.1 | Franchise photo *(also Desktop)* | Back to the previous photo (the brick storefront with the MAD FOR CHICKEN sign, `franchise-marquee.jpg`), cropped so the sign sits centered in the frame. |
 
+## Also included
+
+* **East Meadow hotfix:** the MyManager order link is removed until the Toast link is ready. East Meadow shows "Online ordering soon" (`_build/east_meadow.py`, run after `revise.py`).
+
 ## Still needed
 
 * Single-piece cut-outs for **Thighs, Tenders and Vegetarian Chicken** (next shoot). Drop them in as
@@ -62,5 +66,6 @@ The asset cache key in `site.html` moves from `?v=202610231310` to `?v=202610281
 ## Rebuilding
 
 `_build/revise.py` applies every page change to the Oct 26 `parts/site.html`, and checks that each edit
-lands exactly once: `python3 _build/revise.py <oct26 site.html> <out site.html>`.
+lands exactly once: `python3 _build/revise.py <oct26 site.html> <out site.html>`, then
+`python3 _build/east_meadow.py <out site.html> <out site.html>`.
 `_build/cool.py <in> <out>` applies the colour grade to one image.
