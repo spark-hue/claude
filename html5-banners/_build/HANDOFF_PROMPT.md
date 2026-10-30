@@ -96,8 +96,8 @@ banners took around 30 minutes. Never use `sleep` to wait; run it in the backgro
 
 ## Step 4: Build (`batch/build.py`)
 
-`python3 batch/build.py manifest.json cache out ../..` (the last argument is the zip root, the
-`html5-banners/` folder). Add every approved set to `SKIP_FOLDERS` first so it is never overwritten.
+Run `python3 batch/build.py manifest.json cache out ..` from `html5-banners/_build`. The last argument is
+the zip root, the `html5-banners/` folder. Add every approved set to `SKIP_FOLDERS` first so it is never overwritten.
 
 How it works. Keep all of this as-is; it's what the client approved:
 - **Layers:** each layer is Figma's own export, placed at its Figma position.
