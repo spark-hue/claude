@@ -12,7 +12,7 @@ const LOOP = 8.0, FPS = 15;
   const m = fs.readFileSync(html, 'utf8').match(/width=(\d+),height=(\d+)/);
   const W = +m[1], H = +m[2];
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
+  const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: +(process.env.DSF || 1) });
   await page.goto('file://' + html);
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(100);
@@ -22,7 +22,7 @@ const LOOP = 8.0, FPS = 15;
   }, t * 1000);
 
   // ---- final frame + QA -------------------------------------------------
-  await seek(LOOP - 0.05);
+  await seek(7.4);  // end of the hold, before the loop's fade-out
   await page.screenshot({ path: prefix + '_final.png' });
   const qa = await page.evaluate(([W, H]) => {
     const r = (sel) => { const e = document.querySelector(sel); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.left, y: b.top, r: b.right, b: b.bottom }; };
@@ -36,13 +36,27 @@ const LOOP = 8.0, FPS = 15;
     if (h.scrollWidth > h.clientWidth + 1) issues.push(`headline wider than its box (${h.scrollWidth} > ${h.clientWidth})`);
     // text blocks must not collide with each other
     const ov = (a, b) => a && b && a.x < b.r && b.x < a.r && a.y < b.b && b.y < a.b;
-    // headline: use actual line boxes rather than the container
-    const range = document.createRange(); range.selectNodeContents(h);
-    const lines = [...range.getClientRects()].map(b => ({ x: b.left, y: b.top, r: b.right, b: b.bottom }));
-    for (let i = 1; i < lines.length; i++) if (lines[i].y < lines[i - 1].b - 0.5 && Math.abs(lines[i].y - lines[i-1].y) > 1) issues.push('headline lines overlap');
-    for (const l of lines) { if (ov(l, rects['.body'])) issues.push('headline overlaps body'); if (ov(l, rects['.cta'])) issues.push('headline overlaps CTA'); if (ov(l, rects['.logo'])) issues.push('headline overlaps logo'); }
-    if (ov(rects['.body'], rects['.cta'])) issues.push('body overlaps CTA');
-    return { W, H, issues, headLines: lines.length };
+    // glyph ink box of every text line (canvas metrics), not the line box, so leading doesn't count as overlap
+    const ctx = document.createElement('canvas').getContext('2d');
+    const ink = (blk) => [...document.querySelectorAll(blk + ' span')].map(s => {
+      const cs = getComputedStyle(s); ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      const m = ctx.measureText(s.textContent), fm = ctx.measureText('Hg');
+      const rr = s.getBoundingClientRect(), fs = parseFloat(cs.fontSize);
+      const contentH = fm.fontBoundingBoxAscent + fm.fontBoundingBoxDescent;
+      const base = rr.top + (rr.height - contentH) / 2 + fm.fontBoundingBoxAscent;
+      const w = m.width, x = cs.textAlign === 'right' ? rr.right - w : cs.textAlign === 'center' ? rr.left + (rr.width - w) / 2 : rr.left;
+      if (w > rr.width + 0.5) issues.push(`${blk} line wider than its box: "${s.textContent}"`);
+      return { x, r: x + w, y: base - m.actualBoundingBoxAscent, b: base + m.actualBoundingBoxDescent, t: s.textContent };
+    });
+    const lines = ink('.head'), body = ink('.body');
+    for (const blk of [lines, body]) for (let i = 1; i < blk.length; i++)
+      if (ov(blk[i], blk[i - 1])) issues.push(`lines collide: "${blk[i - 1].t}" / "${blk[i].t}"`);
+    const cta = rects['.cta'], logo = rects['.logo'];
+    for (const l of lines) { if (body.some(b => ov(l, b))) issues.push('headline overlaps body'); if (ov(l, cta)) issues.push('headline overlaps CTA'); if (ov(l, logo)) issues.push('headline overlaps logo'); }
+    for (const l of body) { if (ov(l, cta)) issues.push('body overlaps CTA'); if (ov(l, logo)) issues.push('body overlaps logo'); }
+    const gap = (a, b) => b.y - a.b;  // smallest vertical clearance between consecutive lines, for the report
+    const minGap = Math.min(...[lines, body].flatMap(blk => blk.slice(1).map((l, i) => gap(blk[i], l))), 99);
+    return { W, H, issues, minLineGap: +minGap.toFixed(2) };
   }, [W, H]);
 
   // pixel test: do text pixels land on photo pixels?
