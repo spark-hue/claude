@@ -143,13 +143,24 @@ def build(b):
         anims.append(build_in('cta', *T['cta'], 'opacity:0;transform:scale(.85)', 'opacity:1;transform:none'))
 
     page = TEMPLATE.format(W=W, H=H, css='\n'.join(css), anims='\n'.join(anims), html='\n'.join(html),
-                           title=b['title'], navy=NAVY, din_lh=DIN_LH, din_top=DIN_TOP)
+                           title=b['title'], navy=NAVY, din_lh=DIN_LH, din_top=DIN_TOP).replace('@@CLICKTAG@@', CLICKTAG)
     open(os.path.join(d, 'index.html'), 'w').write(page)
     shutil.copy(os.path.join(ASSETS, 'pfd700.woff2'), d)
     if not single:
         shutil.copy(os.path.join(ASSETS, 'dinot400.woff2'), d)
     return d
 
+
+# Ad-server clickTAG: read from the ?clickTAG= query parameter the platform appends to the page URL.
+CLICKTAG = r"""<script type="text/javascript" charset="utf-8">
+    function getParameterByName(name) {
+      name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
+      var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
+          results = regex.exec(location.search);
+      return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
+    }
+    window.clickTAG = getParameterByName("clickTAG");
+</script>"""
 
 TEMPLATE = '''<!DOCTYPE html>
 <html lang="en">
@@ -158,7 +169,7 @@ TEMPLATE = '''<!DOCTYPE html>
 <meta name="ad.size" content="width={W},height={H}">
 <meta name="viewport" content="width={W},height={H}">
 <title>{title}</title>
-<script>var clickTag = "https://www.thechicagoschool.edu/";</script>
+@@CLICKTAG@@
 <style>
 @font-face{{font-family:"Playfair Display";font-weight:700;font-style:normal;src:url(pfd700.woff2) format("woff2");font-display:block}}
 @font-face{{font-family:"DIN OT";font-weight:400;font-style:normal;src:url(dinot400.woff2) format("woff2");font-display:block}}
@@ -178,7 +189,7 @@ html,body{{width:{W}px;height:{H}px;overflow:hidden;background:#fff}}
 </style>
 </head>
 <body>
-<a id="ad" href="javascript:window.open(window.clickTag)" aria-label="The Chicago School - Learn More">
+<a id="ad" href="javascript:window.open(window.clickTAG);void(0);" aria-label="The Chicago School - Learn More">
 {html}
 </a>
 <script>
