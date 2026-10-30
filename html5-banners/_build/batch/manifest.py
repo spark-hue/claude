@@ -40,6 +40,26 @@ def solid_fill(n):
     return any(f.get('type') == 'SOLID' and f.get('visible', True) for f in n.get('fills', []))
 
 
+def visible_box(n):
+    """Bounds of what a node actually draws: a mask child clips the siblings after it (x0, y0, x1, y1)."""
+    kids = [c for c in n.get('children', []) if c.get('visible', True)]
+    if not kids:
+        b = n['absoluteBoundingBox']
+        return [b['x'], b['y'], b['x'] + b['width'], b['y'] + b['height']]
+    box, mask = None, None
+    for c in kids:
+        if c.get('isMask'):
+            mask = visible_box(c)
+            continue
+        v = visible_box(c)
+        if mask:
+            v = [max(v[0], mask[0]), max(v[1], mask[1]), min(v[2], mask[2]), min(v[3], mask[3])]
+            if v[2] <= v[0] or v[3] <= v[1]:
+                continue
+        box = v if box is None else [min(box[0], v[0]), min(box[1], v[1]), max(box[2], v[2]), max(box[3], v[3])]
+    return box or [0, 0, 0, 0]
+
+
 def classify(frame):
     fb = frame['absoluteBoundingBox']
     W, H = round(fb['width']), round(fb['height'])
@@ -52,6 +72,12 @@ def classify(frame):
         if x >= W or y >= H or x + w <= 0 or y + h <= 0:
             continue  # parked off the artboard
         L = dict(id=c['id'], name=c['name'], x=x, y=y, w=w, h=h)
+        if has_image(c):  # Figma's PNG export covers the visibly drawn area (mask applied, frame not)
+            v = visible_box(c)
+            L['v'] = [v[0] - fb['x'], v[1] - fb['y'], v[2] - v[0], v[3] - v[1]]
+        rb = c.get('absoluteRenderBounds')
+        if rb:  # Figma sizes exports to the rendered bounds, which can overrun the box (e.g. text wider than its component)
+            L['r'] = [rb['x'] - fb['x'], rb['y'] - fb['y'], rb['width'], rb['height']]
         tx = texts(c)
         names = ' '.join(n['name'] for n in walk(c, lambda _: True))
         if tx:

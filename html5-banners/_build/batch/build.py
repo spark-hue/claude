@@ -80,6 +80,21 @@ def backdrop_colour(frame_png, x, y, w, h, alpha, k):
     return False
 
 
+def clear_over(alpha, k, px, py, o):
+    """True if the photo (alpha at scale k, placed at px,py) is fully transparent over layer o's box."""
+    a = np.asarray(alpha)
+    x0, y0 = max(0, int((o['x'] - px) * k) - 1), max(0, int((o['y'] - py) * k) - 1)
+    x1, y1 = min(a.shape[1], int((o['x'] + o['w'] - px) * k) + 2), min(a.shape[0], int((o['y'] + o['h'] - py) * k) + 2)
+    return x1 <= x0 or y1 <= y0 or a[y0:y1, x0:x1].max() < 4
+
+
+def origin(l, w, h):
+    """Top-left of an export of size w x h: Figma uses the render bounds when they differ from the box."""
+    boxes = [(l['x'], l['y'], l['w'], l['h'])] + [tuple(l[k]) for k in ('r', 'v') if k in l]
+    bx, by, _, _ = min(boxes, key=lambda q: abs(q[2] - w) + abs(q[3] - h))
+    return bx, by
+
+
 def build(b):
     W, H, OW = b['W'], b['H'], b['OW']
     widen = OW - W
@@ -103,12 +118,13 @@ def build(b):
     hidden['head2'] = hidden['head']
     T['head2'] = T['head']
 
-    css, html, anims, used = [], [], [], set()
+    css, html, anims, used, lowered = [], [], [], set(), []
     for n, l in enumerate(b['layers']):
         role, x, y = l['role'], l['x'], l['y']
         cls = 'l%d' % n
         if l['kind'] == 'svg':
             svg = open(os.path.join(CACHE, 'svg', fname(l['id']) + '.svg')).read()
+            x, y = origin(l, float(re.search(r'width="([\d.]+)"', svg).group(1)), float(re.search(r'height="([\d.]+)"', svg).group(1)))
             if role == 'bg' and widen:
                 svg = widen_bg(svg, x, widen)
             elif widen:
@@ -122,6 +138,7 @@ def build(b):
             k = 4 if role == 'logo' else (2.2 if W == 150 else 2)
             im = Image.open(os.path.join(CACHE, 'png%g' % k, fname(l['id']) + '.png')).convert('RGBA')
             w, h = im.width / k, im.height / k
+            x, y = origin(l, w, h)
             fx, fy = x, y
             if widen and role == 'photo' and x <= 2 and x + w >= W - 2:
                 s = OW / W  # full-width photo: scale to the wider frame, keep the bottom edge where it was
@@ -136,7 +153,14 @@ def build(b):
             else:
                 alpha = im.split()[3]
                 lo = alpha.getextrema()[0]
-                bgc = (255, 255, 255) if lo == 255 else backdrop_colour(frame_png, fx, fy, im.width / k, im.height / k, alpha, k)
+                # flattening paints the transparent corners, so only when nothing but the background is underneath
+                below = [o for o in b['layers'][:n] if o['role'] != 'bg' and o['x'] < fx + w and fx < o['x'] + o['w']
+                         and o['y'] < fy + h and fy < o['y'] + o['h']]
+                if below and all(clear_over(alpha, k, fx, fy, o) for o in below):
+                    lowered.append(len(html))  # transparent wherever it overlaps them: drawing it beneath them looks the same
+                    below = []
+                bgc = (255, 255, 255) if lo == 255 else False if below else \
+                    backdrop_colour(frame_png, fx, fy, im.width / k, im.height / k, alpha, k)
                 if bgc:  # flatten onto the flat colour it sits on -> plain JPG
                     flat = Image.new('RGB', im.size, bgc)
                     flat.paste(im, mask=alpha)
@@ -168,6 +192,8 @@ def build(b):
                 used.add(r)
                 anims.append(build_in('a_' + r, *T[r], hidden[r], 'opacity:1;transform:none'))
 
+    for i in lowered:  # just above the background
+        html.insert(1, html.pop(i))
     head = next(l for l in b['layers'] if l['role'] == 'head')['text']
     cta = next((l['text'] for l in b['layers'] if l['role'] == 'cta'), 'Learn More')
     label = ('The Chicago School: %s - %s' % (head, cta)).replace('"', '&quot;')
