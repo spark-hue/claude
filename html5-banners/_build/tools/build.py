@@ -151,15 +151,17 @@ def build(b):
     return d
 
 
-# Ad-server clickTAG: read from the ?clickTAG= query parameter the platform appends to the page URL.
-CLICKTAG = r"""<script type="text/javascript" charset="utf-8">
-    function getParameterByName(name) {
-      name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
-      var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
-          results = regex.exec(location.search);
-      return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
-    }
-    window.clickTAG = getParameterByName("clickTAG");
+# Ad-server clickTAG, taken verbatim from the coworker's working The Trade Desk banner.
+CLICKTAG = r"""<script type="text/javascript">
+  // The Trade Desk clickTAG (case-sensitive). TTD appends ?clickTAG=... to the creative URL;
+  // if it is absent (local preview) we fall back to the default landing page below.
+  function getParameterByName(name) {
+    name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
+    var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
+        results = regex.exec(location.search);
+    return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
+  }
+  var clickTAG = getParameterByName("clickTAG") || getParameterByName("clickTag") || "https://www.thechicagoschool.edu/";
 </script>"""
 
 TEMPLATE = '''<!DOCTYPE html>
