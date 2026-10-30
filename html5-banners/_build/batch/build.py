@@ -61,20 +61,25 @@ def build_in(name, t0, t1, hidden, shown):
                             (t1, shown), (end, shown), (LOOP, 'opacity:0;transform:none')])
 
 
-def backdrop_colour(frame_png, x, y, w, h, alpha, k):
-    """Colour behind a photo's transparent pixels in Figma's frame render, if it is one flat colour."""
+def backdrop_colour(frame_png, x, y, w, h, alpha, k, above=()):
+    """Colour behind a photo's transparent pixels in Figma's frame render, if it is one flat colour.
+    Pixels under the layers drawn above the photo (`above`) are ignored."""
     fr = np.asarray(frame_png.convert('RGB')).astype(int)
+    hide = np.zeros(fr.shape[:2], bool)
+    for o in above:
+        hide[max(0, int(o['y'] * 2) - 2):max(0, int((o['y'] + o['h']) * 2) + 3),
+             max(0, int(o['x'] * 2) - 2):max(0, int((o['x'] + o['w']) * 2) + 3)] = True
     a = np.asarray(alpha.resize((max(1, round(w * 2)), max(1, round(h * 2))))) if k != 2 else np.asarray(alpha)
     X, Y = round(x * 2), round(y * 2)
     hh, ww = a.shape
     ys, xs = np.nonzero(a == 0)
     ys, xs = ys + Y, xs + X
     ok = (ys >= 0) & (xs >= 0) & (ys < fr.shape[0]) & (xs < fr.shape[1])
+    ok[ok] &= ~hide[ys[ok], xs[ok]]
     if ok.sum() == 0:
         return None
     px = fr[ys[ok], xs[ok]]
     med = np.median(px, axis=0)
-    # text drawn above the photo can land on its transparent corners, so allow a few stray pixels
     if (np.abs(px - med).max(axis=1) <= 10).mean() > 0.9:
         return tuple(int(v) for v in med)
     return False
@@ -83,6 +88,8 @@ def backdrop_colour(frame_png, x, y, w, h, alpha, k):
 def clear_over(alpha, k, px, py, o):
     """True if the photo (alpha at scale k, placed at px,py) is fully transparent over layer o's box."""
     a = np.asarray(alpha)
+    if 'r' in o:  # the ink, not the (often much wider) text box
+        o = dict(x=o['r'][0], y=o['r'][1], w=o['r'][2], h=o['r'][3])
     x0, y0 = max(0, int((o['x'] - px) * k) - 1), max(0, int((o['y'] - py) * k) - 1)
     x1, y1 = min(a.shape[1], int((o['x'] + o['w'] - px) * k) + 2), min(a.shape[0], int((o['y'] + o['h'] - py) * k) + 2)
     return x1 <= x0 or y1 <= y0 or a[y0:y1, x0:x1].max() < 4
@@ -160,7 +167,7 @@ def build(b):
                     lowered.append(len(html))  # transparent wherever it overlaps them: drawing it beneath them looks the same
                     below = []
                 bgc = (255, 255, 255) if lo == 255 else False if below else \
-                    backdrop_colour(frame_png, fx, fy, im.width / k, im.height / k, alpha, k)
+                    backdrop_colour(frame_png, fx, fy, im.width / k, im.height / k, alpha, k, b['layers'][n + 1:])
                 if bgc:  # flatten onto the flat colour it sits on -> plain JPG
                     flat = Image.new('RGB', im.size, bgc)
                     flat.paste(im, mask=alpha)
