@@ -6,7 +6,7 @@
 import http.client, json, os, sys, time, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
-KEY = 'kf0eIQHtVt2kHCWCHBXUHb'
+KEY = os.environ.get('FIGMA_FILE_KEY', 'kf0eIQHtVt2kHCWCHBXUHb')  # set FIGMA_FILE_KEY for another file
 API = 'https://api.figma.com/v1/images/' + KEY
 
 
