@@ -3,7 +3,7 @@
 #   cache/svg/<id>.svg        vector layers and text (Figma outlines the glyphs)
 #   cache/png<scale>/<id>.png  photo groups (2x; 2.2x on 150x600 frames, which are widened to 160) and image logos (4x)
 #   cache/frame/<id>.png       the whole frame at 2x, the reference the build is checked against
-import json, os, sys, time, urllib.request, urllib.error
+import http.client, json, os, sys, time, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
 KEY = 'kf0eIQHtVt2kHCWCHBXUHb'
@@ -25,7 +25,7 @@ def get(url, tries=6):
             wait = int(e.headers.get('Retry-After') or 0) or 2 ** (t + 2)
             print('  HTTP %d, retry in %ds' % (e.code, wait), flush=True)
             time.sleep(min(wait, 120))
-        except (urllib.error.URLError, TimeoutError):
+        except (urllib.error.URLError, TimeoutError, http.client.HTTPException, ConnectionError):
             if t == tries - 1:
                 raise
             time.sleep(2 ** (t + 1))
@@ -37,6 +37,13 @@ def export(ids, fmt, scale, out_dir, batch):
     print('%s x%s -> %s: %d to export' % (fmt, scale, out_dir, len(todo)), flush=True)
 
     def one(chunk):
+        try:
+            return one_try(chunk)
+        except Exception as e:  # leave it for the next run; files already fetched stay cached
+            print('  batch failed (%s), rerun to fill in' % e, flush=True)
+            return len(chunk)
+
+    def one_try(chunk):
         q = '%s?ids=%s&format=%s' % (API, ','.join(urllib.request.quote(i, safe=':;') for i in chunk), fmt)
         if fmt == 'png':
             q += '&scale=%g' % scale

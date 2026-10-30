@@ -74,7 +74,8 @@ def backdrop_colour(frame_png, x, y, w, h, alpha, k):
         return None
     px = fr[ys[ok], xs[ok]]
     med = np.median(px, axis=0)
-    if (np.abs(px - med).max(axis=1) <= 10).mean() > 0.995:
+    # text drawn above the photo can land on its transparent corners, so allow a few stray pixels
+    if (np.abs(px - med).max(axis=1) <= 10).mean() > 0.9:
         return tuple(int(v) for v in med)
     return False
 
@@ -141,16 +142,10 @@ def build(b):
                     flat.paste(im, mask=alpha)
                     src = '%s.jpg' % cls
                     flat.save(os.path.join(d, src), quality=82, subsampling=0, optimize=True, progressive=True)
-                else:    # sits over mixed content: JPG plus an alpha mask
-                    src = '%s.jpg' % cls
-                    flat = Image.new('RGB', im.size, (0, 0, 0))
-                    flat.paste(im, mask=alpha)
-                    flat.save(os.path.join(d, src), quality=82, subsampling=0, optimize=True, progressive=True)
-                    m = Image.new('LA', im.size, (0, 0))
-                    m.putalpha(alpha)
-                    m.save(os.path.join(d, '%sm.png' % cls), optimize=True)
-                    css.append('.%s{-webkit-mask-image:url(%sm.png);mask-image:url(%sm.png);'
-                               '-webkit-mask-size:100%% 100%%;mask-size:100%% 100%%}' % (cls, cls, cls))
+                else:    # sits over mixed content: keep the transparency (PNG)
+                    src = '%s.png' % cls
+                    im.save(os.path.join(d, src), optimize=True)
+                    print('  transparent PNG photo:', b['name'], l['id'])
         html.append('<img class="%s" src="%s" alt="">' % (cls, src))
         geo = 'left:%.2fpx;top:%.2fpx;width:%.2fpx;height:%.2fpx' % (x, y, w, h)
 
